@@ -50,18 +50,46 @@ az keyvault set-policy --name "${sector_key_vault_name}" --object-id "${deploy_s
     --certificate-permissions create get update list \
     --secret-permissions get list set
 
-
 az keyvault set-policy --name "${sector_key_vault_name}" --object-id "${hcp_service_sp_object_id}" \
     --secret-permissions get list
 
-## generate certificates
-## s2s_cert
+
+# set issuer name
 ISSUER_NAME="Self"
 if [ "${ISSUER_NAME}" == "" ]; then
   issuer_name="SslAdmin"
 else
   issuer_name=$ISSUER_NAME
 fi
+
+## ssl_admin_issuer
+declare -r 'CHECKMARK=\xe2\x9c\x94'
+declare -r 'EXMARK=\xe2\x9c\x98'
+printf "Checking for SSLAdmin Issuers: "
+
+acrp_prod_subscription_id=$AKS_UNDERLAY_SUBSCRIPTION_ID
+provider_name="SslAdmin"
+ISSUER_NAMES=$(az keyvault certificate issuer list --subscription ${acrp_prod_subscription_id} --vault-name ${sector_key_vault_name} -o json | \
+                  jq '.[] | select(.provider == "${provider_name}" ) | .id | capture("/issuers/(?<issuer>.+)$") | .issuer' | \
+                  jq -sc '.' )
+printf "%s" "$ISSUER_NAMES = "
+
+if echo "$ISSUER_NAMES" | jq -e 'map(. == "${issuer_name}") | any' > /dev/null; then
+printf "$CHECKMARK\n"
+else
+printf "$EXMARK\n"
+az keyvault certificate issuer create \
+  --subscription ${acrp_prod_subscription_id} \
+  --vault-name ${sector_key_vault_name} \
+  --issuer-name ${issuer_name} \
+  --provider-name ${provider_name}
+fi
+
+## keyvault_contact_email
+az keyvault certificate contact add --subscription ${acrp_prod_subscription_id} --vault-name ${sector_key_vault_name} --email "akshot@microsoft.com"
+
+## generate certificates
+## s2s_cert
 
 cert_name="s2s-cert"
 subject="s2s.${SECTOR_NAME}.${DEPLOY_ENV}.acs.azure.com"
