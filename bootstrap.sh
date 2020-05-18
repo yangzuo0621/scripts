@@ -1,12 +1,13 @@
 #!/bin/bash
 
-source create-resources.sh
+workdir=$(dirname "$0")
+source $workdir/create-resources.sh
 
-VERSION_STRING="ebld31143320zuya"
+VERSION_STRING="ebld20200518zuya"
 LOCATION="WESTUS2"
 
 # 1. create resource group
-# HCP_PREFIX_OVERRIDE="hcp${VERSION_STRING}"
+HCP_PREFIX_OVERRIDE="hcp${VERSION_STRING}"
 if [ "${HCP_PREFIX_OVERRIDE}" == "" ]; then
     region_resource_group="hcp-udl-${DEPLOY_ENV}"
 else
@@ -30,7 +31,7 @@ aks::e2e::resource::storage_account "${regional_storage_account_name}" "${region
 aks::e2e::resource::storage_container "config" "${regional_storage_account_name}"
 
 # etcd storage account
-# ETCD_BACKUPS_NAME_OVERRIDE="etcd${VERSION_STRING}"
+ETCD_BACKUPS_NAME_OVERRIDE="etcd${VERSION_STRING}"
 if [ "${ETCD_BACKUPS_NAME_OVERRIDE}" == "" ]; then
     tmpstring="etcd${LOCATION}${DEPLOY_ENV}"
     replacestr="${tmpstring//-/}" # replace '-'' with ''
@@ -102,7 +103,7 @@ aks::e2e::resource::role_assignment "${DEPLOY_SP_OBJECT_ID}" "${scope}" "Contrib
 
 
 # 4. key vault
-# REGIONAL_KEYVAULT_NAME_OVERRIDE="kvr${VERSION_STRING}"
+REGIONAL_KEYVAULT_NAME_OVERRIDE="kvr${VERSION_STRING}"
 # user_object_id=LOGGED_IN_USER_OBJ_ID
 if [ "${REGIONAL_KEYVAULT_NAME_OVERRIDE}" == "" ]; then
     regional_keyvault_name="hcp-${LOCATION}-${DEPLOY_ENV}"
@@ -125,3 +126,105 @@ az keyvault set-policy --name "${name_cleaned}" --object-id "${HCP_SERVICE_SP_OB
 az keyvault set-policy --name "${name_cleaned}" --object-id "${CUSTOMER_SP_OBJECT_ID}" --secret-permissions get list
 
 # 5. ssl admin certs
+
+# hcp_api_tls_cert
+INSTANCE_DNS_PREFIX_OVERRIDE="${VERSION_STRING}"
+if [ "${INSTANCE_DNS_PREFIX_OVERRIDE}" == "" ]; then
+    instance_dns_prefix="${LOCATION}"
+else
+    instance_dns_prefix=$INSTANCE_DNS_PREFIX_OVERRIDE
+fi
+cert_name="hcp-api-${LOCATIOn}-certificate"
+subject="hcp-api.${instance_dns_prefix}.${DEPLOY_ENV}.aks.compute.azure.com"
+issuer_name = "Self"
+
+cat > hcp_api_tls_cert.json <<EOF
+{
+  "issuerParameters": {
+    "certificateTransparency": null,
+    "name": "${issuer_name}"
+  },
+  "keyProperties": {
+    "curve": null,
+    "exportable": true,
+    "keySize": 4096,
+    "keyType": "RSA",
+    "reuseKey": true
+  },
+  "lifetimeActions": [
+    {
+      "action": {
+        "actionType": "AutoRenew"
+      },
+      "trigger": {
+        "daysBeforeExpiry": 30
+      }
+    }
+  ],
+  "secretProperties": {
+    "contentType": "application/x-pem-file"
+  },
+  "x509CertificateProperties": {
+    "keyUsage": [
+      "cRLSign",
+      "dataEncipherment",
+      "digitalSignature",
+      "keyEncipherment",
+      "keyAgreement",
+      "keyCertSign"
+    ],
+    "subject": "CN=${subject}",
+    "validityInMonths": 12
+  }
+}
+EOF
+
+az keyvault certificate create --vault-name "${name_cleaned}" --name "${cert_name}" -p @hcp_api_tls_cert.json
+
+# tunnelgateway_cert
+cert_name="hcp-tun-${LOCATIOn}-certificate"
+subject="*.tun.${instance_dns_prefix}.${DEPLOY_ENV}.azmk8s.io"
+issuer_name = "Self"
+
+cat > tunnelgateway_cert.json <<EOF
+{
+  "issuerParameters": {
+    "certificateTransparency": null,
+    "name": "${issuer_name}"
+  },
+  "keyProperties": {
+    "curve": null,
+    "exportable": true,
+    "keySize": 4096,
+    "keyType": "RSA",
+    "reuseKey": true
+  },
+  "lifetimeActions": [
+    {
+      "action": {
+        "actionType": "AutoRenew"
+      },
+      "trigger": {
+        "daysBeforeExpiry": 30
+      }
+    }
+  ],
+  "secretProperties": {
+    "contentType": "application/x-pem-file"
+  },
+  "x509CertificateProperties": {
+    "keyUsage": [
+      "cRLSign",
+      "dataEncipherment",
+      "digitalSignature",
+      "keyEncipherment",
+      "keyAgreement",
+      "keyCertSign"
+    ],
+    "subject": "CN=${subject}",
+    "validityInMonths": 12
+  }
+}
+EOF
+
+az keyvault certificate create --vault-name "${name_cleaned}" --name "${cert_name}" -p @tunnelgateway_cert.json
