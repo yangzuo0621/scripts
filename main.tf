@@ -32,3 +32,17 @@ export TUNNEL_REGISTRY_USERNAME=${data.azurerm_container_registry.prod.admin_use
 export TUNNEL_REGISTRY_PASSWORD=${data.azurerm_container_registry.prod.admin_password}
 EOT
 }
+
+resource "azurerm_storage_account" "regional" {
+  name                     = "hcpebld20200505zuyasto"
+  resource_group_name      = "sectorebld20200508zuya"
+  location                 = "westsu"
+  account_kind             = "StorageV2"
+  access_tier              = "Hot"
+  account_replication_type = "LRS"
+  account_tier             = "Standard"
+}
+
+output "regional_storage_account_connection_string" {
+  value = "${azurerm_storage_account.regional.primary_connection_string}"
+}

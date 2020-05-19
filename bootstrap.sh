@@ -4,6 +4,8 @@ workdir=$(dirname "$0")
 source $workdir/create-resources.sh
 source $workdir/env.sh
 
+output_file=bootstrap.output
+
 # 1. create resource group
 if [ "${HCP_PREFIX_OVERRIDE}" == "" ]; then
   resource_group_name="hcp-udl-${DEPLOY_ENV}"
@@ -284,3 +286,18 @@ if [ "${issuer_name}" == "" ]; then
       --email 'aksonmooncake@microsoft.com'
   fi
 fi
+
+regional_storage_account_connection_string=$(az storage account show-connection-string -g "${resource_group_name}" -n "${regional_storage_account_name}" --query connectionString --output tsv)
+
+cat > "${output_file}" <<EOF
+regional_resource_group=${resource_group_name}
+regional_subscription_id=${AKS_UNDERLAY_SUBSCRIPTION_ID}
+regional_vault=${name_cleaned}
+customer_underlay_vault=${name_cleaned}
+hcp_service_vault=${name_cleaned}
+hcp_api_uri=hcp-api.${instance_dns_prefix}.${hcp_api_root_dns_zone}
+etcd_backups_storage_account=${etcd_storage_account_name}
+regional_storage_account=${regional_storage_account_name}
+regional_storage_account_config_storage=config
+regional_storage_account_connection_string=${regional_storage_account_connection_string}
+EOF
