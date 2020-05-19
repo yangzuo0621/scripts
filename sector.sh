@@ -4,6 +4,8 @@ workdir=$(dirname "$0")
 source $workdir/create-resources.sh
 source $workdir/env.sh
 
+output_file=sector.output
+
 # 1. create keyvault and certs
 if [ "${SECTOR_RESOURCE_GROUP_OVERRIDE}" == "" ]; then
   sector_resource_group="rp-common-${SECTOR_NAME}-${DEPLOY_ENV}${VERSION_STRING}"
@@ -24,6 +26,12 @@ else
 fi
 
 az keyvault create --name "${sector_key_vault_name}" --resource-group "${sector_resource_group}" --location "${sector_group_location}" --sku premium --enabled-for-template-deployment true
+sector_key_vault_id=$(az keyvault show --name "${sector_key_vault_name}" --query id --output tsv)
+
+cat > "${output_file}" <<EOF
+sector_key_vault_name=${sector_key_vault_name}
+sector_key_vault_id=${sector_key_vault_id}
+EOF
 
 ## set access policy on keyvault
 current_logged_in_user_object_id=$LOGGED_IN_USER_OBJ_ID
@@ -46,9 +54,38 @@ az keyvault set-policy --name "${sector_key_vault_name}" --object-id "${deploy_s
     --certificate-permissions create get update list \
     --secret-permissions get list set
 
-az keyvault set-policy --name "${sector_key_vault_name}" --object-id "${hcp_service_sp_object_id}" \
-    --secret-permissions get list
+if [ ${ALL_IN_ONE_SP} == true ]; then
+  az keyvault set-policy --name "${sector_key_vault_name}" --object-id "${hcp_service_sp_object_id}" \
+    --secret-permissions get list set
+fi
 
+if [ "${ISSUER_NAME}" == "" ]; then
+  ## ssl_admin_issuer
+  declare -r 'CHECKMARK=\xe2\x9c\x94'
+  declare -r 'EXMARK=\xe2\x9c\x98'
+  printf "Checking for SSLAdmin Issuers: "
+
+  acrp_prod_subscription_id=$AKS_UNDERLAY_SUBSCRIPTION_ID
+  provider_name="SslAdmin"
+  ISSUER_NAMES=$(az keyvault certificate issuer list --subscription ${acrp_prod_subscription_id} --vault-name ${sector_key_vault_name} -o json | \
+                    jq '.[] | select(.provider == "${provider_name}" ) | .id | capture("/issuers/(?<issuer>.+)$") | .issuer' | \
+                    jq -sc '.' )
+  printf "%s" "$ISSUER_NAMES = "
+
+  if echo "$ISSUER_NAMES" | jq -e 'map(. == "${issuer_name}") | any' > /dev/null; then
+  printf "$CHECKMARK\n"
+  else
+  printf "$EXMARK\n"
+  az keyvault certificate issuer create \
+    --subscription ${acrp_prod_subscription_id} \
+    --vault-name ${sector_key_vault_name} \
+    --issuer-name ${issuer_name} \
+    --provider-name ${provider_name}
+  fi
+
+  ## keyvault_contact_email
+  az keyvault certificate contact add --subscription ${acrp_prod_subscription_id} --vault-name ${sector_key_vault_name} --email "akshot@microsoft.com"
+fi
 
 # set issuer name
 if [ "${ISSUER_NAME}" == "" ]; then
@@ -56,32 +93,6 @@ if [ "${ISSUER_NAME}" == "" ]; then
 else
   issuer_name=$ISSUER_NAME
 fi
-
-## ssl_admin_issuer
-declare -r 'CHECKMARK=\xe2\x9c\x94'
-declare -r 'EXMARK=\xe2\x9c\x98'
-printf "Checking for SSLAdmin Issuers: "
-
-acrp_prod_subscription_id=$AKS_UNDERLAY_SUBSCRIPTION_ID
-provider_name="SslAdmin"
-ISSUER_NAMES=$(az keyvault certificate issuer list --subscription ${acrp_prod_subscription_id} --vault-name ${sector_key_vault_name} -o json | \
-                  jq '.[] | select(.provider == "${provider_name}" ) | .id | capture("/issuers/(?<issuer>.+)$") | .issuer' | \
-                  jq -sc '.' )
-printf "%s" "$ISSUER_NAMES = "
-
-if echo "$ISSUER_NAMES" | jq -e 'map(. == "${issuer_name}") | any' > /dev/null; then
-printf "$CHECKMARK\n"
-else
-printf "$EXMARK\n"
-az keyvault certificate issuer create \
-  --subscription ${acrp_prod_subscription_id} \
-  --vault-name ${sector_key_vault_name} \
-  --issuer-name ${issuer_name} \
-  --provider-name ${provider_name}
-fi
-
-## keyvault_contact_email
-az keyvault certificate contact add --subscription ${acrp_prod_subscription_id} --vault-name ${sector_key_vault_name} --email "akshot@microsoft.com"
 
 ## generate certificates
 ## s2s_cert
@@ -132,6 +143,7 @@ cat > s2s_cert.json <<EOF
 EOF
 
 az keyvault certificate create --vault-name "${sector_key_vault_name}" --name "${cert_name}" -p @s2s_cert.json
+s2s_cert_secret_id=$(az keyvault certificate show --vault-name "${sector_key_vault_name}" --name "${cert_name}" --query id --output tsv)
 
 ## s2s_cert
 cert_name="ssl-cert"
@@ -181,6 +193,7 @@ cat > ssl_cert.json <<EOF
 EOF
 
 az keyvault certificate create --vault-name "${sector_key_vault_name}" --name "${cert_name}" -p @ssl_cert.json
+ssl_cert_secret_id=$(az keyvault certificate show --vault-name "${sector_key_vault_name}" --name "${cert_name}" --query id --output tsv)
 
 ## mds_cert
 cert_name="mds-cert"
@@ -309,6 +322,13 @@ cat > encryption_cert.json <<EOF
 EOF
 
 az keyvault certificate create --vault-name "${sector_key_vault_name}" --name "${cert_name}" -p @encryption_cert.json
+encryption_cert_secret_id=$(az keyvault certificate show --vault-name "${sector_key_vault_name}" --name "${cert_name}" --query id --output tsv)
+
+cat >> "${output_file}" <<EOF
+s2s_cert_secret_id=${s2s_cert_secret_id}
+ssl_cert_secret_id=${ssl_cert_secret_id}
+encryption_cert_secret_id=${encryption_cert_secret_id}
+EOF
 
 ## resource group for database
 if [ "${DATABASE_RG_NAME_OVERRIDE}" == "" ]; then
@@ -327,6 +347,8 @@ else
   primary_database_server_name=$PRIMARY_DATABASE_SERVER_NAME_OVERRIDE
 fi
 
+sql_primary_location=$LOCATION
+
 ## generate password and store in keyvault
 sql_admin_secret_name="sql-dbadmin-pwd"
 sql_password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16 ; echo '')
@@ -338,7 +360,7 @@ aks::e2e::resource::key_vault_secret "${sql_admin_secret_name}" "${sector_key_va
 aks::e2e::resource::key_vault_secret "${sql_server_acs_user_secret_name}" "${sector_key_vault_name}" "${sql_acs_user_password}"
 
 sql_server_admin_user="dbadmin"
-aks::e2e::resource::sql_server "${primary_database_server_name}" "${database_rg_name}" "${LOCATION}" "${sql_server_admin_user}" "${sql_password}"
+aks::e2e::resource::sql_server "${primary_database_server_name}" "${database_rg_name}" "${sql_primary_location}" "${sql_server_admin_user}" "${sql_password}"
 
 ## set sql firewall rule
 firewall_rule_primary="acs-${LOCATION}-primary-firewall-rules"
@@ -394,3 +416,27 @@ if ${sql_command} -Q "${check_user}" | grep "0 rows affected" > /dev/null; then
 else
   echo "User ${DB_ACS_USER} already exists"
 fi
+
+primary_secret_id=$(az keyvault secret show --vault-name "${sector_key_vault_name}" --name "${sql_admin_secret_name}" --query id --output tsv)
+primary_acs_dbuser_secret_id=$(az keyvault secret show --vault-name "${sector_key_vault_name}" --name "${sql_server_acs_user_secret_name}" --query id --output tsv)
+
+sql_primary_secret=$primary_secret_id
+if [ "${DEPLOY_ENV}" == "e2e" ]; then
+  sql_server_acs_user=$sql_server_admin_user
+  sql_primary_acs_dbuser_secret=$primary_secret_id
+else
+  sql_primary_acs_dbuser_secret=$primary_acs_dbuser_secret_id
+fi
+
+cat >> "${output_file}" <<EOF
+primary_database_server_name=${primary_database_server_name}
+primary_database_server_location=${sql_primary_location}
+sql_server_admin_user=${sql_server_admin_user}
+sql_admin_secret_name=${sql_admin_secret_name}
+sql_server_acs_user=${sql_server_acs_user}
+sql_server_acs_user_secret_name=${sql_server_acs_user_secret_name}
+sql_server_resource_group=${database_rg_name}
+sql_db_name=${sql_db_name}
+sql_primary_acs_dbuser_secret=${sql_primary_acs_dbuser_secret}
+sql_primary_secret=${sql_primary_secret}
+EOF
