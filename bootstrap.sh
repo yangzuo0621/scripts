@@ -57,7 +57,7 @@ aks::e2e::resource::storage_account "${etcd_storage_account_name}" "${region_res
 scope="/subscriptions/${AKS_UNDERLAY_SUBSCRIPTION_ID}"
 aks::e2e::resource::role_assignment "${DEPLOY_SP_OBJECT_ID}" "${scope}" "Contributor"
 aks::e2e::resource::role_assignment "${CUSTOMER_SP_OBJECT_ID}" "${scope}" "Contributor"
-aks::e2e::resource::role_assignment "${AKS_UNDERLAY_SUBSCRIPTION_ID}" "${scope}" "Contributor"
+aks::e2e::resource::role_assignment "${HCP_SERVICE_SP_OBJECT_ID}" "${scope}" "Contributor"
 
 # 3. rbac - acr
 

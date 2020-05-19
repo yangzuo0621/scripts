@@ -2,12 +2,9 @@
 
 workdir=$(dirname "$0")
 source $workdir/create-resources.sh
-
-VERSION_STRING="ebld20200518zuya"
-LOCATION="WESTUS2"
+source $workdir/env.sh
 
 # 1. create keyvault and certs
-SECTOR_RESOURCE_GROUP_OVERRIDE="sector${VERSION_STRING}"
 if [ "${SECTOR_RESOURCE_GROUP_OVERRIDE}" == "" ]; then
   sector_resource_group="rp-common-${SECTOR_NAME}-${DEPLOY_ENV}${VERSION_STRING}"
 else
@@ -20,7 +17,6 @@ sector_group_location=$LOCATION
 aks::e2e::resource::resource_group "${sector_resource_group}" "${sector_group_location}" ""
 
 ## keyvault for sector
-SECTOR_KEYVAULT_NAME_OVERRIDE="kvs${VERSION_STRING}"
 if [ "${SECTOR_KEYVAULT_NAME_OVERRIDE}" == "" ]; then
   sector_key_vault_name="acs-${SECTOR_NAME}-${DEPLOY_ENV}"
 else
@@ -55,7 +51,6 @@ az keyvault set-policy --name "${sector_key_vault_name}" --object-id "${hcp_serv
 
 
 # set issuer name
-ISSUER_NAME="Self"
 if [ "${ISSUER_NAME}" == "" ]; then
   issuer_name="SslAdmin"
 else
@@ -128,7 +123,7 @@ cat > s2s_cert.json <<EOF
     "subject": "CN=${subject}",
     "subjectAlternativeNames": {
       "dnsNames": [
-        "${s2s.${SECTOR_NAME}.${DEPLOY_ENV}.acs.azure.com}"
+        "s2s.${SECTOR_NAME}.${DEPLOY_ENV}.acs.azure.com"
       ]
     },
     "validityInMonths": 24
@@ -314,3 +309,88 @@ cat > encryption_cert.json <<EOF
 EOF
 
 az keyvault certificate create --vault-name "${sector_key_vault_name}" --name "${cert_name}" -p @encryption_cert.json
+
+## resource group for database
+if [ "${DATABASE_RG_NAME_OVERRIDE}" == "" ]; then
+  database_rg_name="sql-${SECTOR_NAME}-${DEPLOY_ENV}"
+else
+  database_rg_name=$DATABASE_RG_NAME_OVERRIDE
+fi
+sector_group_location=$LOCATION
+
+aks::e2e::resource::resource_group "${database_rg_name}" "${sector_group_location}" ""
+
+## create sql server
+if [ "${PRIMARY_DATABASE_SERVER_NAME_OVERRIDE}" == "" ]; then
+  primary_database_server_name=acs-${LOCATION}-${DEPLOY_ENV}
+else
+  primary_database_server_name=$PRIMARY_DATABASE_SERVER_NAME_OVERRIDE
+fi
+
+## generate password and store in keyvault
+sql_admin_secret_name="sql-dbadmin-pwd"
+sql_password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16 ; echo '')
+
+sql_server_acs_user_secret_name="sql-dbuser-0415-2019-pwd"
+sql_acs_user_password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 16 ; echo '')
+
+aks::e2e::resource::key_vault_secret "${sql_admin_secret_name}" "${sector_key_vault_name}" "${sql_password}"
+aks::e2e::resource::key_vault_secret "${sql_server_acs_user_secret_name}" "${sector_key_vault_name}" "${sql_acs_user_password}"
+
+sql_server_admin_user="dbadmin"
+aks::e2e::resource::sql_server "${primary_database_server_name}" "${database_rg_name}" "${LOCATION}" "${sql_server_admin_user}" "${sql_password}"
+
+## set sql firewall rule
+firewall_rule_primary="acs-${LOCATION}-primary-firewall-rules"
+aks::e2e::resource::sql_firewall_rule "${firewall_rule_primary}" "${database_rg_name}" "${primary_database_server_name}" "0.0.0.0" "0.0.0.0"
+
+# May be removed when all tf2 are replaced
+firewall_rule_primary_terraform="acs-${LOCATION}-terraform-firewall-rules"
+aks::e2e::resource::sql_firewall_rule "${firewall_rule_primary_terraform}" "${database_rg_name}" "${primary_database_server_name}" "24.9.237.0" "24.9.237.255"
+
+## create sql database
+sql_db_name="acs"
+aks::e2e::resource::sql_database "${sql_db_name}" "${database_rg_name}" "${primary_database_server_name}"
+
+## create sql user
+# if sqlcmd not found, link it.
+if ! command -v sqlcmd; then
+  ln -s /opt/mssql-tools/bin/sqlcmd /usr/local/bin/sqlcmd || true
+fi
+
+sql_server_acs_user="dbuser_0415_2019"
+# INPUTS
+DB_ADMIN_USER="${sql_server_admin_user}"
+DB_ADMIN_PASSWORD="${sql_password}"
+DB_NAME="${sql_db_name}"
+SQL_SERVER="${primary_database_server_name}.database.windows.net"
+DB_ACS_USER="${sql_server_acs_user}"
+DB_ACS_PASSWORD="${sql_acs_user_password}"
+
+create_user_query=$(cat <<EOF
+CREATE USER ${DB_ACS_USER} WITH PASSWORD = '${DB_ACS_PASSWORD}'; 
+GO
+CREATE ROLE db_execproc; 
+GO
+EXEC sp_addrolemember N'db_execproc', N'${DB_ACS_USER}'; 
+GO
+GRANT EXECUTE ON SCHEMA::dbo TO db_execproc; 
+GO
+EOF
+)
+
+check_user=$(cat <<EOF
+SELECT name FROM sysusers WHERE name="${DB_ACS_USER}"; 
+GO
+EOF
+)
+
+export SQLCMDPASSWORD="${DB_ADMIN_PASSWORD}"
+
+sql_command="sqlcmd -S "${SQL_SERVER}" -U "${DB_ADMIN_USER}" -d "${DB_NAME}" -P "${DB_ADMIN_PASSWORD}""
+
+if ${sql_command} -Q "${check_user}" | grep "0 rows affected" > /dev/null; then
+  ${sql_command} -Q "${create_user_query}"
+else
+  echo "User ${DB_ACS_USER} already exists"
+fi
