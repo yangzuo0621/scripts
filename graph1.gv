@@ -1,0 +1,198 @@
+digraph G {
+  node [shape=plaintext]
+  create_resource_group [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>Create resource group</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">reginal resource group</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">sector resource group</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">database resource group</font></td></tr>
+      </table>
+    >]
+
+  create_key_vault [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>Create keyvault</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">regional keyvault</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">sector keyvault</font></td></tr>
+      </table>
+    >]
+
+  add_access_policy_on_keyvault [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>add access policy</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">regional keyvault</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">sector keyvault</font></td></tr>
+      </table>
+    >]
+
+  create_key_vault_certificate [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create keyvault certificate</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">s2s-cert [sector keyvault]</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">ssl-cert [sector keyvault]</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">mds-cert [sector keyvault]</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">mdm-cert [sector keyvault]</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">encryption-cert [sector keyvault]</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">hcp_api_tls_cert [regional keyvault]</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">tunnelgateway_cert [regional keyvault]</font></td></tr>
+      </table>
+    >]
+
+  create_storage_account [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create storage account</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">regional storage account</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">etcd storage account</font></td></tr>
+      </table>
+    >]
+
+  create_storage_container [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create storage container</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">config storage container</font></td></tr>
+      </table>
+    >]
+
+  create_storage_blob [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create storage blob</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">toggles storage blob</font></td></tr>
+      </table>
+    >]
+
+  create_sql_password [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create sql password</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">sql admin secret</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">sql acs user secret</font></td></tr>
+      </table>
+    >]
+
+  create_sql_server [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create sql server</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">primary database server</font></td></tr>
+      </table>
+    >]
+
+  create_sql_database [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create sql database</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">primary sql database</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">regional sql database</font></td></tr>
+      </table>
+    >]
+
+  create_sql_firewall_rule [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create sql firewall rule</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">primary firewall rules</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">terraform firewall rules</font></td></tr>
+      </table>
+    >]
+
+  create_sql_user [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create sql user</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">primary sql database</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">regional sql database</font></td></tr>
+      </table>
+    >]
+
+  create_resource_group -> create_key_vault
+  create_key_vault -> add_access_policy_on_keyvault
+  create_key_vault -> create_key_vault_certificate
+
+  create_resource_group -> create_storage_account
+  create_storage_account -> create_storage_container
+  create_storage_account -> create_storage_blob
+  create_storage_container -> create_storage_blob
+
+  create_key_vault -> create_sql_password
+  create_resource_group -> create_sql_server
+  create_sql_password -> create_sql_server
+  create_sql_server -> create_sql_firewall_rule
+  create_sql_server -> create_sql_database
+  create_sql_database -> create_sql_user
+  create_sql_password -> create_sql_user
+
+  create_dns_zone [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create dns zone</b></td></tr>
+      </table>
+    >]
+
+  create_dns_ns_record [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create dns ns record</b></td></tr>
+      </table>
+    >]
+  create_dns_zone -> create_dns_ns_record
+
+  role_assignment [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>role assignment</b></td></tr>
+      </table>
+    >]
+
+  dns_rbac [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>dns rbac</b></td></tr>
+      </table>
+    >]
+
+  subscription_rbac [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>subscription rbac</b></td></tr>
+      </table>
+    >]
+
+  "tfstate_rw-container_ro-rbac" [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>tfstate_rw-container_ro rbac</b></td></tr>
+      </table>
+    >]
+
+  role_assignment -> dns_rbac
+  role_assignment -> subscription_rbac
+  role_assignment -> "tfstate_rw-container_ro-rbac"
+
+  generate_local_file [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>generate local file</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">envrc-registry (overlay/00-arr.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">svc-envrcs (overlay/05-envrcs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">cx-envrcs (overlay/05-envrcs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">svc-envrcs-default (overlay/05-envrcs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">cx-envrcs-default (overlay/05-envrcs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">extra_env_rc (overlay/10-extra_envrc.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">acsrp_config (overlay/import_acsrp_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">acsrp_config_admin (overlay/import_acsrp_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">hcp_region_yaml (overlay/import_charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">registry_yaml (overlay/import_charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">rp_region_yaml (overlay/import_charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">nginx_ingress_controller_yaml (overlay/import_charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">envrc-registry (region_resources/00-acr.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">svc-envrcs (region_resources/.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">cx-envrcs (region_resources/05-envrcs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">svc-envrcs-default (region_resources/05-envrcs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">cx-envrcs-default (region_resources/05-envrcs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">hcp_region_yaml (region_resources/04-charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">rp_region_yaml (region_resources/04-charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">registry_yaml (region_resources/04-charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">nginx_ingress_controller_yaml (region_resources/04-charts_configs.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">acsrp_config ((region_resources/08-acsrp_configurations.tf)</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">acsrp_config_admin((region_resources/08-acsrp_configurations.tf)</font></td></tr>
+      </table>
+    >]
+
+  create_hcp_svc_infrastructure [ label=<
+      <table border="1" cellborder="0" cellspacing="1">
+        <tr><td align="left"><b>create hcp svc infrastructure</b></td></tr>
+        <tr><td align="left"><font color="darkgreen">hcp_service</font></td></tr>
+        <tr><td align="left"><font color="darkgreen">keyvault_loader/generic-v2</font></td></tr>
+      </table>
+    >]
+
+}
+<tr><td align="left"><font color="darkgreen">hcp_api_tls_cert [regional keyvault]</font></td></tr>
