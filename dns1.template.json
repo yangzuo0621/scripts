@@ -1,0 +1,24 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2018-05-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "newZoneName": {
+            "type": "string",
+            "defaultValue": "www.customer.com"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/dnszones",
+            "name": "[parameters('newZoneName')]",
+            "apiVersion": "2016-04-01",
+            "location": "global"
+        }
+    ],
+    "outputs": {
+        "nameServers": {
+            "type": "array",
+            "value": "[reference(parameters('newZoneName')).nameServers]"
+        }
+    }
+}

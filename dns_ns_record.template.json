@@ -1,0 +1,36 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2018-05-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "name_servers": {
+            "type": "array"
+        },
+        "customer_root_zone_name": {
+            "type": "string",
+            "defaultValue": "www.mysite1.com"
+        },
+        "ns_record_name": {
+            "type": "string",
+            "defaultValue": "MyRecord555"
+        }
+    },
+    "resources": [
+        {
+            "name": "[concat(parameters('customer_root_zone_name'), '/', parameters('ns_record_name'))]",
+            "type": "Microsoft.Network/dnsZones/NS",
+            "apiVersion": "2016-04-01",
+            "properties": {
+                "TTL": 300,
+                "copy": [
+                    {
+                        "name": "NSRecords",
+                        "count": "[length(parameters('name_servers'))]",
+                        "input": {
+                            "nsdname": "[parameters('name_servers')[copyIndex('NSRecords')]]"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}
